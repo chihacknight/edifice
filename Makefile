@@ -1,6 +1,6 @@
 include config.mk
 
-all : parcel.table taxes.table
+all : parcels.table taxes.table buildings.table
 
 foia-22606-2013-10-16.zip :
 	wget --no-use-server-timestamps https://s3.amazonaws.com/purple-giraffe-data/$@
@@ -16,7 +16,7 @@ ccgisdata-Parcel_2013.shp : parcels.zip
 	unzip -j $<
 	touch $@
 
-parcel.table : ccgisdata-Parcel_2013.shp
+parcels.table : ccgisdata-Parcel_2013.shp
 	shp2pgsql -I -s 4326 -d $< $(basename $@) | psql -d $(PG_DB)
 	touch $@
 
@@ -63,3 +63,18 @@ taxes.table : FOI22606.CSV
 	psql -d $(PG_DB) -c \
 		"COPY $(basename $@) FROM STDIN WITH CSV QUOTE AS '\"' DELIMITER AS ','"
 	touch $@
+
+.PHONY: buildings.table
+buildings.table:
+	psql $(PG_DB) -c "ALTER TABLE buildings ADD COLUMN address varchar(100)"
+	psql -d $(PG_DB) -c "UPDATE buildings SET \
+		address = concat(concat_ws(' ', \
+			label_hous, \
+			unit_name, \
+			pre_dir1, \
+			st_name1, \
+			suf_dir1, \
+			st_type1), ', CHICAGO, IL')"
+join:
+	# source bin/activate	
+	python join.py
