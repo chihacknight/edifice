@@ -1,5 +1,6 @@
 include config.mk
 
+.PHONY : all
 all : parcels.table taxes.table buildings.table
 
 foia-22606-2013-10-16.zip :
@@ -75,6 +76,48 @@ buildings.table:
 			st_name1, \
 			suf_dir1, \
 			st_type1), ', CHICAGO, IL')"
-join:
+
+.PHONY: clean
+clean :	
+	rm addressPointChi.*
+	rm addresses.zip	
+
+97634.sql :
+	wget --no-use-server-timestamps -O $@ "http://spatialreference.org/ref/sr-org/7634/postgis/"
+
+.PHONY : 97634.insert
+97634.insert : 97634.sql
+	# Chicago Building Footprints dataset has coordinates in the IL State Plane
+	# coordinate system (also see Cook County Address Points metadata).
+	# Note that PostGIS doesn't accept the ESRI:102671 SRID, so I'm using
+	# SR-ORG:7634, which is very similar, instead.
+	sudo su postgres -c "psql $(PG_DB) -f $<"
+
+.PHONY : footprints.table
+footprints.table : footprints.sql 97634.insert
+	psql -d $(PG_DB) -f $<
+
+join :
 	# source bin/activate	
 	python join.py
+
+addresses.zip :
+	wget --no-use-server-timestamps -O $@ "https://datacatalog.cookcountyil.gov/api/geospatial/jev2-4wjs?method=export&format=Shapefile"
+
+addressPointChi.shp : addresses.zip
+	unzip -j $<
+	touch $@
+
+.PHONY : addresses.table 
+addresses.table : addressPointChi.shp
+	# Synthesize address field out of components.
+	shp2pgsql -I -s 4326 -d $< $(basename $@) | psql -d $(PG_DB)
+	psql -d $(PG_DB) -c "ALTER TABLE addresses ADD COLUMN address varchar(171)"
+	psql -d $(PG_DB) -c "UPDATE addresses SET address = concat_ws(' ', \
+		addrnocom, \
+		stnamecom, \
+		uspspn, \
+		uspsst, \
+		zip5 \
+	)"
+
