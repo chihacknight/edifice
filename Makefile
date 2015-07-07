@@ -1,7 +1,7 @@
 include config.mk
 
 .PHONY : all
-all : parcels.table taxes.table buildings.table
+all : parcels.table taxes.table buildings.table addresses.table
 
 foia-22606-2013-10-16.zip :
 	wget --no-use-server-timestamps https://s3.amazonaws.com/purple-giraffe-data/$@
@@ -96,16 +96,9 @@ addressPointChi.shp : addresses.zip
 	unzip -j $<
 	touch $@
 
-.PHONY : addresses.table 
-addresses.table : addressPointChi.shp
+addresses.table : addressPointChi.shp addresses.sql
 	# Synthesize address field out of components.
 	shp2pgsql -I -s 4326 -d $< $(basename $@) | psql -d $(PG_DB)
-	psql -d $(PG_DB) -c "ALTER TABLE addresses ADD COLUMN address varchar(171)"
-	psql -d $(PG_DB) -c "UPDATE addresses SET address = concat_ws(' ', \
-		addrnocom, \
-		stnamecom, \
-		uspspn, \
-		uspsst, \
-		zip5 \
-	)"
+	psql -d $(PG_DB) -f $(word 2, $^)
+	touch $@
 
