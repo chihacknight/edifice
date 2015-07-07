@@ -65,18 +65,6 @@ taxes.table : FOI22606.CSV
 		"COPY $(basename $@) FROM STDIN WITH CSV QUOTE AS '\"' DELIMITER AS ','"
 	touch $@
 
-.PHONY: buildings.table
-buildings.table:
-	psql $(PG_DB) -c "ALTER TABLE buildings ADD COLUMN address varchar(100)"
-	psql -d $(PG_DB) -c "UPDATE buildings SET \
-		address = concat(concat_ws(' ', \
-			label_hous, \
-			unit_name, \
-			pre_dir1, \
-			st_name1, \
-			suf_dir1, \
-			st_type1), ', CHICAGO, IL')"
-
 .PHONY: clean
 clean :	
 	rm addressPointChi.*
@@ -93,8 +81,8 @@ clean :
 	# SR-ORG:7634, which is very similar, instead.
 	sudo su postgres -c "psql $(PG_DB) -f $<"
 
-.PHONY : footprints.table
-footprints.table : footprints.sql 97634.insert
+.PHONY : buildings.table
+buildings.table : buildings.sql 97634.insert
 	psql -d $(PG_DB) -f $<
 
 join :
