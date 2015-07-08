@@ -2,6 +2,7 @@
 # This script is cobbled together out of two example scripts by DataMade:
 #   https://github.com/datamade/address-matching/blob/master/address_matching.py#   https://github.com/datamade/dedupe-examples/blob/master/pgsql_big_dedupe_example/pgsql_big_dedupe_example.py   
 
+import os
 import yaml
 
 import dedupe
@@ -20,16 +21,34 @@ c1 = psycopg2.connect(
     , cursor_factory = psycopg2.extras.RealDictCursor 
     )
 
-c2 = psycopg2.connect(
-    database = config["db"]["database"],
-    cursor_factory = psycopg2.extras.RealDictCursor)
+c2 = psycopg2.connect( 
+    database = config["db"]["database"]
+    , cursor_factory = psycopg2.extras.RealDictCursor
+    )
 
-#if os.path.exists(settings_location):
-#    with open(settings_location, 'r') as settings:
-#        linker = dedupe.StaticGazetteer(settings, num_cores = 2)
-#else:
+if os.path.exists(settings_location):
+    with open(settings_location, 'r') as settings:
+        linker = dedupe.StaticGazetteer(settings, num_cores = 2)
+else:
 
-#    fields = [{ 'field': 'Address', 'type': 'Address' }]
+    fields = [ 
+        { 
+            'field': 'Address', 
+            'type': 'Address', 
+            'has missing': True,
+            'variable name': 'address' 
+        },
+        { 
+            'field': 'LatLng', 
+            'type': 'LatLong', 
+            'has missing': True,
+            'variable name': 'latlng' 
+        },
+        { 
+            'type': 'Interaction', 
+            'interaction variables': ['address', 'latlng'] 
+        }
+    ]
     
     linker = dedupe.Gazetteer(fields, num_cores = 2)
 
@@ -40,7 +59,8 @@ c2 = psycopg2.connect(
     tmp_messy = dict((i, row) for i, row in enumerate(address_select))
 
     linker.sample(tmp_canonical, tmp_messy, 75000)
-    del tmp_gazetteer
+    del tmp_canonical, tmp_messy
+
 
     # Use training data from previous runs of dedupe, if it exists.
     # Note: If you want to retrain from scratch, delete the training data file.
@@ -52,35 +72,33 @@ c2 = psycopg2.connect(
     print 'starting interactive labeling...'
     dedupe.consoleLabel(linker)
 
-#    # We train dedupe on a random sample of the addresses.
-#    linker.sample(messy_addresses, canonical_addresses, 30000))
-#    
+    # We train dedupe on a random sample of the addresses.
+    linker.sample(messy_addresses, canonical_addresses, 30000)
     
-#    dedupe.consoleLabel(linker)
-#    linker.train()
-#
-#    # when finished, save our training away to disk
-#    with open(training_location, 'w') as training:
-#        linker.writeTraining(training)
-#
-#    with open(settings_location, 'w') as settings:
-#        linker.writeSettings(settings)
-#
-#    linker.cleanupTraining()
+    linker.train()
 
-#print 'indexing...'
-#linker.index(canonical_addresses)
+    # when finished, save our training away to disk
+    with open(training_location, 'w') as training:
+        linker.writeTraining(training)
 
-#print 'clustering...'
-#clustered_dupes = linker.match(messy_addresses, 0.0)
+    with open(settings_location, 'w') as settings:
+        linker.writeSettings(settings)
 
-#print '# duplicate sets', len(clustered_dupes)
-#print 'out of', len(messy_addresses)
+    linker.cleanupTraining()
 
-#canonical_lookup = {}
-#for n_results in clustered_dupes:
-#    (source_id, target_id), score = n_results[0]
-#    canonical_lookup[source_id] = (target_id, score)
+print 'indexing...'
+linker.index(canonical_addresses)
+
+print 'clustering...'
+clustered_dupes = linker.match(messy_addresses, 0.0)
+
+print '# duplicate sets', len(clustered_dupes)
+print 'out of', len(messy_addresses)
+
+canonical_lookup = {}
+for n_results in clustered_dupes:
+    (source_id, target_id), score = n_results[0]
+    canonical_lookup[source_id] = (target_id, score)
 
 
 
