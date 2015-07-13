@@ -17,7 +17,7 @@ ccgisdata-Parcel_2013.shp : parcels.zip
 	unzip -j $<
 	touch $@
 
-parcels.table : ccgisdata-Parcel_2013.shp
+parcels.table : ccgisdata-Parcel_2013.shp $(PG_DB).db
 	shp2pgsql -I -s 4326 -d $< $(basename $@) | psql -d $(PG_DB)
 	touch $@
 
@@ -26,7 +26,7 @@ $(PG_DB).db :
 	sudo su postgres -c "psql -d $(PG_DB) -c \"CREATE EXTENSION postgis\""
 	touch $@
 
-taxes.table : FOI22606.CSV
+taxes.table : FOI22606.CSV $(PG_DB).db
 	psql -d $(PG_DB) -c \
 		"CREATE TABLE $(basename $@) \
 		 (pin CHAR(14), \
@@ -75,7 +75,7 @@ clean :
 	wget --no-use-server-timestamps -O $@ "http://spatialreference.org/ref/sr-org/7634/postgis/"
 
 .PHONY : 97634.insert
-97634.insert : 97634.sql
+97634.insert : 97634.sql $(PG_DB).db
 	# Chicago Building Footprints dataset has coordinates in the IL State Plane
 	# coordinate system (also see Cook County Address Points metadata).
 	# Note that PostGIS doesn't accept the ESRI:102671 SRID, so I'm using
@@ -89,7 +89,7 @@ buildings.shp : buildings.zip
 	unzip -j $<
 	touch $@
 
-buildings.table : buildings.shp buildings.sql 97634.insert
+buildings.table : buildings.shp buildings.sql 97634.insert $(PG_DB).db
 	shp2pgsql -I -D -W "LATIN1" -s 97634 -d $< $(basename $@) | psql -d $(PG_DB)
 	psql -d $(PG_DB) -f $(word 2, $^)
 	touch $@
@@ -105,7 +105,7 @@ addressPointChi.shp : addresses.zip
 	unzip -j $<
 	touch $@
 
-addresses.table : addressPointChi.shp addresses.sql
+addresses.table : addressPointChi.shp addresses.sql $(PG_DB).db
 	# Synthesize address field out of components.
 	shp2pgsql -I -s 4326 -d $< $(basename $@) | psql -d $(PG_DB)
 	psql -d $(PG_DB) -f $(word 2, $^)
