@@ -21,9 +21,10 @@ parcels.table : ccgisdata-Parcel_2013.shp
 	shp2pgsql -I -s 4326 -d $< $(basename $@) | psql -d $(PG_DB)
 	touch $@
 
-make_db :
-	createdb $(PG_DB)
-	psql -d $(PG_DB) -c "CREATE EXTENSION postgis"
+$(PG_DB).db :
+	createdb $(PG_DB) -U $(PG_USER)
+	sudo su postgres -c "psql -d $(PG_DB) -c \"CREATE EXTENSION postgis\""
+	touch $@
 
 taxes.table : FOI22606.CSV
 	psql -d $(PG_DB) -c \
