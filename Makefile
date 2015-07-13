@@ -68,8 +68,16 @@ taxes.table : FOI22606.CSV $(PG_DB).db
 
 .PHONY: clean
 clean :	
-	rm addressPointChi.*
-	rm addresses.zip	
+	dropdb $(PG_DB) -U $(PG_USER)	
+	rm *.db
+	rm *.table
+	# rm addressPointChi.*
+	# rm ccgisdata-Parcel_2013.*
+	# rm 97634.sql
+	# rm FOI22606.CSV
+	# rm foia-22606-2013-10-16.zip
+	# rm parcels.zip
+	# rm addresses.zip	
 
 97634.sql :
 	wget --no-use-server-timestamps -O $@ "http://spatialreference.org/ref/sr-org/7634/postgis/"
