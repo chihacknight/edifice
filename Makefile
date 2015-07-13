@@ -81,9 +81,17 @@ clean :
 	# SR-ORG:7634, which is very similar, instead.
 	sudo su postgres -c "psql $(PG_DB) -f $<"
 
-.PHONY : buildings.table
-buildings.table : buildings.sql 97634.insert
-	psql -d $(PG_DB) -f $<
+buildings.zip : 
+	wget --no-use-server-timestamps -O $@ "https://data.cityofchicago.org/api/geospatial/qv97-3bvb?method=export&format=Shapefile"
+
+buildings.shp : buildings.zip
+	unzip -j $<
+	touch $@
+
+buildings.table : buildings.shp buildings.sql 97634.insert
+	shp2pgsql -I -D -W "LATIN1" -s 97634 -d $< $(basename $@) | psql -d $(PG_DB)
+	psql -d $(PG_DB) -f $(word 2, $^)
+	touch $@
 
 join :
 	# source bin/activate	
