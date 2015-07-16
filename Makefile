@@ -3,29 +3,44 @@ include config.mk
 .PHONY : all
 all : parcels.table taxes.table buildings.table addresses.table
 
-foia-22606-2013-10-16.zip :
-	wget --no-use-server-timestamps https://s3.amazonaws.com/purple-giraffe-data/$@
+.PHONY: clean
+clean :	
+	dropdb $(PG_DB) -U $(PG_USER)	
+	rm *.db
+	rm *.table
+	rm *.insert
+	rm addressPointChi.*
+	rm ccgisdata-Parcel_2013.*
+	rm 97634.sql
+	rm FOI22606.CSV
+	rm foia-22606-2013-10-16.zip
+	rm parcels.zip
+	rm addresses.zip	
 
-parcels.zip :
-	wget --no-use-server-timestamps -O $@ "https://datacatalog.cookcountyil.gov/api/geospatial/5i2c-y2u6?method=export&format=Original"
 
-FOI22606.CSV : foia-22606-2013-10-16.zip
-	unzip -j $< "FOI 22606/$@"
+join :
+	# source bin/activate	
+	python join.py
+
+
+# ============================
+# Cook County Property Parcels
+# ============================
+parcels.table : ccgisdata-Parcel_2013.shp $(PG_DB).db
+	shp2pgsql -I -s 4326 -d $< $(basename $@) | psql -d $(PG_DB)
 	touch $@
 
 ccgisdata-Parcel_2013.shp : parcels.zip
 	unzip -j $<
 	touch $@
 
-parcels.table : ccgisdata-Parcel_2013.shp $(PG_DB).db
-	shp2pgsql -I -s 4326 -d $< $(basename $@) | psql -d $(PG_DB)
-	touch $@
+parcels.zip :
+	wget --no-use-server-timestamps -O $@ "https://datacatalog.cookcountyil.gov/api/geospatial/5i2c-y2u6?method=export&format=Original"
 
-$(PG_DB).db :
-	createdb $(PG_DB) -U $(PG_USER)
-	sudo su postgres -c "psql -d $(PG_DB) -c \"CREATE EXTENSION postgis\""
-	touch $@
 
+# =================================================================
+# Cook County Tax Assessor's Data (obtained via FOIA request 22606)
+# =================================================================
 taxes.table : FOI22606.CSV $(PG_DB).db
 	psql -d $(PG_DB) -c \
 		"CREATE TABLE $(basename $@) \
@@ -66,56 +81,68 @@ taxes.table : FOI22606.CSV $(PG_DB).db
 		"COPY $(basename $@) FROM STDIN WITH CSV QUOTE AS '\"' DELIMITER AS ','"
 	touch $@
 
-.PHONY: clean
-clean :	
-	dropdb $(PG_DB) -U $(PG_USER)	
-	rm *.db
-	rm *.table
-	# rm addressPointChi.*
-	# rm ccgisdata-Parcel_2013.*
-	# rm 97634.sql
-	# rm FOI22606.CSV
-	# rm foia-22606-2013-10-16.zip
-	# rm parcels.zip
-	# rm addresses.zip	
+FOI22606.CSV : foia-22606-2013-10-16.zip
+	unzip -j $< "FOI 22606/$@"
+	touch $@
 
-97634.sql :
-	wget --no-use-server-timestamps -O $@ "http://spatialreference.org/ref/sr-org/7634/postgis/"
+foia-22606-2013-10-16.zip :
+	wget --no-use-server-timestamps https://s3.amazonaws.com/purple-giraffe-data/$@
 
-.PHONY : 97634.insert
+
+# =========================
+# Illinois State Plane SRID
+# =========================
 97634.insert : 97634.sql $(PG_DB).db
 	# Chicago Building Footprints dataset has coordinates in the IL State Plane
 	# coordinate system (also see Cook County Address Points metadata).
 	# Note that PostGIS doesn't accept the ESRI:102671 SRID, so I'm using
 	# SR-ORG:7634, which is very similar, instead.
 	sudo su postgres -c "psql $(PG_DB) -f $<"
-
-buildings.zip : 
-	wget --no-use-server-timestamps -O $@ "https://data.cityofchicago.org/api/geospatial/qv97-3bvb?method=export&format=Shapefile"
-
-buildings.shp : buildings.zip
-	unzip -j $<
 	touch $@
 
+97634.sql :
+	wget --no-use-server-timestamps -O $@ \
+		"http://spatialreference.org/ref/sr-org/7634/postgis/"
+
+
+# ===================================
+# City of Chicago Building Footprints
+# ===================================
 buildings.table : buildings.shp buildings.sql 97634.insert $(PG_DB).db
 	shp2pgsql -I -D -W "LATIN1" -s 97634 -d $< $(basename $@) | psql -d $(PG_DB)
 	psql -d $(PG_DB) -f $(word 2, $^)
 	touch $@
 
-join :
-	# source bin/activate	
-	python join.py
+buildings.shp : buildings.zip
+	unzip -j $<
+	touch $@
 
-addresses.zip :
-	wget --no-use-server-timestamps -O $@ "https://datacatalog.cookcountyil.gov/api/geospatial/jev2-4wjs?method=export&format=Shapefile"
+buildings.zip : 
+	wget --no-use-server-timestamps -O $@ "https://data.cityofchicago.org/api/geospatial/qv97-3bvb?method=export&format=Shapefile"
+
+
+# ================================================
+# Cook County Address Points (canonical addresses)
+# ================================================
+addresses.table : addressPointChi.shp addresses.sql $(PG_DB).db
+	# Synthesize address field out of components.
+	shp2pgsql -I -s 4326 -d $< $(basename $@) | psql -d $(PG_DB)
+	psql -d $(PG_DB) -f $(word 2, $^)
+	touch $@
 
 addressPointChi.shp : addresses.zip
 	unzip -j $<
 	touch $@
 
-addresses.table : addressPointChi.shp addresses.sql $(PG_DB).db
-	# Synthesize address field out of components.
-	shp2pgsql -I -s 4326 -d $< $(basename $@) | psql -d $(PG_DB)
-	psql -d $(PG_DB) -f $(word 2, $^)
+addresses.zip :
+	wget --no-use-server-timestamps -O $@ "https://datacatalog.cookcountyil.gov/api/geospatial/jev2-4wjs?method=export&format=Shapefile"
+
+
+# ==============
+# Database setup
+# ==============
+$(PG_DB).db :
+	createdb $(PG_DB) -U $(PG_USER)
+	sudo su postgres -c "psql -d $(PG_DB) -c \"CREATE EXTENSION postgis\""
 	touch $@
 
