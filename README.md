@@ -11,7 +11,8 @@ To retrieve, transform, and load the data,
 1. In the root of this repository, run `cp config.mk.example config.mk` 
    to create a configuration file for Make, and adjust the database 
    environment variables to match your system.
-2. Type `make` at the command line to build all targets in the `Makefile`.
+2. Run `virtualenv . && source bin/activate && pip install -r requirements.txt` to create an isolated python environment and install the project's python dependencies.
+3. Type `make` at the command line to build all targets in the `Makefile`.
 
 ### Acknowledgments
 
