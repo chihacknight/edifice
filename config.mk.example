@@ -6,8 +6,8 @@ SHELL := bash
 .DELETE_ON_ERROR:
 .SUFFIXES:
 
-PG_HOST="localhost"
-PG_USER="user"
-PG_DB="edifice"
-PG_PORT="5432"
-PG_PASS="password"
+PG_HOST = localhost
+PG_USER = edifice
+PG_DB= edifice
+PG_PORT = 5432
+PG_PASS = password
