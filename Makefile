@@ -3,19 +3,26 @@ include config.mk
 .PHONY : all
 all : parcels.table taxes.table buildings.table addresses.table
 
+
 .PHONY: clean
 clean :	
-	dropdb $(PG_DB) -U $(PG_USER)	
-	rm *.db
-	rm *.table
-	rm *.insert
-	rm addressPointChi.*
-	rm ccgisdata-Parcel_2013.*
-	rm 97634.sql
-	rm FOI22606.CSV
-	rm foia-22606-2013-10-16.zip
-	rm parcels.zip
-	rm addresses.zip	
+	# Use `rm -f` so that no errors are thrown if the files don't exist.
+
+	# Clean up database
+	dropdb $(PG_DB) --if-exists -U $(PG_USER)	
+	rm -f *.db
+	rm -f *.table
+	rm -f *.insert
+
+	# Clean up intermediate data files
+	rm -f buildings.{dbf,prj,sbn,sbx,shp,shx} # avoid deleting buildings.sql
+	rm -f addressPointChi.*
+	rm -f ccgisdata-Parcel_2013.*
+	rm -f FOI22606.CSV
+	rm -f *.zip
+
+	# Clean up downloaded scripts
+	rm -f 97634.sql
 
 
 join :
