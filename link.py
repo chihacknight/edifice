@@ -12,6 +12,7 @@ import psycopg2.extras
 
 config_location = 'config.yml'
 settings_location = 'dedupe.settings'
+training_location = 'dedupe_training.json'
 
 with open(config_location, 'r') as config_file:
     config = yaml.load(config_file.read())

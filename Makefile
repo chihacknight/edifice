@@ -1,7 +1,7 @@
 include config.mk
 
 .PHONY : all
-all : parcels.table taxes.table buildings.table addresses.table
+all : link
 
 
 .PHONY: clean
@@ -25,9 +25,9 @@ clean :
 	rm -f 97634.sql
 
 
-join :
+link : addresses.table buildings.table
 	# source bin/activate	
-	python join.py
+	python link.py
 
 
 # ============================
