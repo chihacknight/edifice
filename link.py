@@ -7,7 +7,7 @@ import os
 import tempfile
 
 import dedupe
-import dedupe.variables
+import dedupe.variables.address
 import psycopg2
 import psycopg2.extras
 
@@ -54,11 +54,14 @@ else:
     
     linker = dedupe.Gazetteer(fields, num_cores = 2)
 
-    address_select = c1.cursor('address_select')
-    address_select.execute("SELECT address FROM addresses")
+    canonical_addresses = conn1.cursor('canonical_addresses')
+    canonical_addresses.execute("SELECT address, latlng, pin FROM addresses")
 
-    tmp_canonical = dict((i, row) for i, row in enumerate(address_select))
-    tmp_messy = dict((i, row) for i, row in enumerate(address_select))
+    messy_addresses = conn2.cursor('messy_addresses')
+    messy_addresses.execute("SELECT address, latlng FROM buildings")
+
+    tmp_canonical = dict((i, row) for i, row in enumerate(canonical_addresses))
+    tmp_messy = dict((i, row) for i, row in enumerate(messy_addresses))
 
     linker.sample(tmp_canonical, tmp_messy, 75000)
     del tmp_canonical, tmp_messy
@@ -74,10 +77,7 @@ else:
     print 'starting interactive labeling...'
     dedupe.consoleLabel(linker)
 
-    # We train dedupe on a random sample of the addresses.
-    linker.sample(messy_addresses, canonical_addresses, 30000)
-    
-    linker.train()
+    linker.train(ppc = 0.001, uncovered_dupes = 5)
 
     # when finished, save our training away to disk
     with open(training_location, 'w') as training:
@@ -87,12 +87,6 @@ else:
         linker.writeSettings(settings)
 
     linker.cleanupTraining()
-
-canonical_select = conn1.cursor()
-canonical_select.execute("SELECT address, latlng, pin FROM addresses")
-
-print 'indexing...'
-linker.index((row for row in canonical_select))
 
 print 'blocking...'
 
