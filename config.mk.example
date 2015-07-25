@@ -6,8 +6,8 @@ SHELL := bash
 .DELETE_ON_ERROR:
 .SUFFIXES:
 
-PG_HOST = localhost
-PG_USER = edifice
-PG_DB= edifice
-PG_PORT = 5432
-PG_PASS = password
+# Set environment variables
+export PGUSER = edifice
+export PGDATABASE = edifice
+export PGHOST = localhost
+export PGPORT = 5432

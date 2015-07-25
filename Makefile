@@ -5,7 +5,7 @@ all : link
 
 
 .PHONY: clean
-clean : $(PG_DB).clean
+clean : $(PGDATABASE).clean
 	# Clean up downloaded files
 	# Use `rm -f` so that no errors are thrown if the files don't exist.
 	rm -f buildings.{dbf,prj,sbn,sbx,shp,shx} # avoid deleting buildings.sql
@@ -24,8 +24,8 @@ link : addresses.table buildings.table
 # ============================
 # Cook County Property Parcels
 # ============================
-parcels.table : ccgisdata-Parcel_2013.shp $(PG_DB).db
-	shp2pgsql -I -s 4326 -d $< $(basename $@) | psql -d $(PG_DB)
+parcels.table : ccgisdata-Parcel_2013.shp $(PGDATABASE).db
+	shp2pgsql -I -s 4326 -d $< $(basename $@) | psql
 	touch $@
 
 ccgisdata-Parcel_2013.shp : parcels.zip
@@ -39,8 +39,8 @@ parcels.zip :
 # =================================================================
 # Cook County Tax Assessor's Data (obtained via FOIA request 22606)
 # =================================================================
-taxes.table : FOI22606.CSV $(PG_DB).db
-	psql -d $(PG_DB) -c \
+taxes.table : FOI22606.CSV $(PGDATABASE).db
+	psql -c \
 		"CREATE TABLE $(basename $@) \
 		 (pin CHAR(14), \
 		  mailing_address VARCHAR(50), \
@@ -75,7 +75,7 @@ taxes.table : FOI22606.CSV $(PG_DB).db
 		  pass INTEGER, \
 		  assessment_year INTEGER)"
 	iconv -f latin1 -t utf-8 $< | \
-	psql -d $(PG_DB) -c \
+	psql -c \
 		"COPY $(basename $@) FROM STDIN WITH CSV QUOTE AS '\"' DELIMITER AS ','"
 	touch $@
 
@@ -90,12 +90,13 @@ foia-22606-2013-10-16.zip :
 # =========================
 # Illinois State Plane SRID
 # =========================
-97634.insert : 97634.sql $(PG_DB).db
+97634.insert : 97634.sql $(PGDATABASE).db
 	# Chicago Building Footprints dataset has coordinates in the IL State Plane
 	# coordinate system (also see Cook County Address Points metadata).
 	# Note that PostGIS doesn't accept the ESRI:102671 SRID, so I'm using
 	# SR-ORG:7634, which is very similar, instead.
-	sudo su postgres -c "psql $(PG_DB) -f $<"
+	sudo -u postgres --preserve-env \
+		psql -U postgres -f $<
 	touch $@
 
 97634.sql :
@@ -106,9 +107,9 @@ foia-22606-2013-10-16.zip :
 # ===================================
 # City of Chicago Building Footprints
 # ===================================
-buildings.table : buildings.shp buildings.sql 97634.insert $(PG_DB).db
-	shp2pgsql -I -D -W "LATIN1" -s 97634 -d $< $(basename $@) | psql -d $(PG_DB)
-	psql -d $(PG_DB) -f $(word 2, $^)
+buildings.table : buildings.shp buildings.sql 97634.insert $(PGDATABASE).db
+	shp2pgsql -I -D -W "LATIN1" -s 97634 -d $< $(basename $@) | psql 
+	psql -f $(word 2, $^)
 	touch $@
 
 buildings.shp : buildings.zip
@@ -122,10 +123,10 @@ buildings.zip :
 # ================================================
 # Cook County Address Points (canonical addresses)
 # ================================================
-addresses.table : addressPointChi.shp addresses.sql $(PG_DB).db
+addresses.table : addressPointChi.shp addresses.sql $(PGDATABASE).db
 	# Synthesize address field out of components.
-	shp2pgsql -I -s 4326 -d $< $(basename $@) | psql -d $(PG_DB)
-	psql -d $(PG_DB) -f $(word 2, $^)
+	shp2pgsql -I -s 4326 -d $< $(basename $@) | psql
+	psql -f $(word 2, $^)
 	touch $@
 
 addressPointChi.shp : addresses.zip
@@ -136,19 +137,19 @@ addresses.zip :
 	wget --no-use-server-timestamps -O $@ "https://datacatalog.cookcountyil.gov/api/geospatial/jev2-4wjs?method=export&format=Shapefile"
 
 
-# ==============
-# Database setup
-# ==============
-$(PG_DB).db :
-	createdb $(PG_DB) -U $(PG_USER)
-	sudo su postgres -c "psql -d $(PG_DB) -c \"CREATE EXTENSION postgis\""
+# ===========================
+# Database setup and teardown
+# ===========================
+$(PGDATABASE).db :
+	createdb $(PGDATABASE) -U $(PGUSER)
+	sudo -u postgres --preserve-env \
+		psql -U postgres -c "CREATE EXTENSION postgis"
 	touch $@
 
-.PHONY : $(PG_DB).clean
-$(PG_DB).clean :
-	dropdb $(PG_DB) -U $(PGUSER) --if-exists	
+.PHONY : $(PGDATABASE).clean
+$(PGDATABASE).clean :
+	dropdb $(PGDATABASE) -U $(PGUSER) --if-exists	
 	rm -f *.db
 	rm -f *.table
 	rm -f *.insert
-
 
