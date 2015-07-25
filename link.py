@@ -2,30 +2,30 @@
 # This script is cobbled together out of two example scripts by DataMade:
 #   https://github.com/datamade/address-matching/blob/master/address_matching.py#   https://github.com/datamade/dedupe-examples/blob/master/pgsql_big_dedupe_example/pgsql_big_dedupe_example.py   
 
+import csv
 import os
-import yaml
 
 import dedupe
 import dedupe.variables
 import psycopg2
 import psycopg2.extras
 
-config_location = 'config.yml'
 settings_location = 'dedupe.settings'
 training_location = 'dedupe_training.json'
 
-with open(config_location, 'r') as config_file:
-    config = yaml.load(config_file.read())
-
-c1 = psycopg2.connect( 
-    database = config["db"]["database"]
+conn1 = psycopg2.connect( 
+    database = os.environ['PGDATABASE']
+    , user = os.environ['PGUSER']
     , cursor_factory = psycopg2.extras.RealDictCursor 
     )
 
-c2 = psycopg2.connect( 
-    database = config["db"]["database"]
+conn2 = psycopg2.connect( 
+    database = os.environ['PGDATABASE']
+    , user = os.environ['PGUSER']
     , cursor_factory = psycopg2.extras.RealDictCursor
     )
+
+cursor = conn1.cursor()
 
 if os.path.exists(settings_location):
     with open(settings_location, 'r') as settings:
