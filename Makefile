@@ -5,23 +5,14 @@ all : link
 
 
 .PHONY: clean
-clean :	
+clean : $(PG_DB).clean
+	# Clean up downloaded files
 	# Use `rm -f` so that no errors are thrown if the files don't exist.
-
-	# Clean up database
-	dropdb $(PG_DB) --if-exists -U $(PG_USER)	
-	rm -f *.db
-	rm -f *.table
-	rm -f *.insert
-
-	# Clean up intermediate data files
 	rm -f buildings.{dbf,prj,sbn,sbx,shp,shx} # avoid deleting buildings.sql
 	rm -f addressPointChi.*
 	rm -f ccgisdata-Parcel_2013.*
 	rm -f FOI22606.CSV
 	rm -f *.zip
-
-	# Clean up downloaded scripts
 	rm -f 97634.sql
 
 
@@ -152,4 +143,12 @@ $(PG_DB).db :
 	createdb $(PG_DB) -U $(PG_USER)
 	sudo su postgres -c "psql -d $(PG_DB) -c \"CREATE EXTENSION postgis\""
 	touch $@
+
+.PHONY : $(PG_DB).clean
+$(PG_DB).clean :
+	dropdb $(PG_DB) -U $(PGUSER) --if-exists	
+	rm -f *.db
+	rm -f *.table
+	rm -f *.insert
+
 
