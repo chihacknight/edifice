@@ -17,8 +17,7 @@ clean : $(PGDATABASE).clean
 
 
 link : addresses.table buildings.table
-	# source bin/activate	
-	python link.py
+	source bin/activate; python link.py
 
 
 # ============================
