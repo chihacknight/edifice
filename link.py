@@ -35,13 +35,13 @@ else:
 
     fields = [ 
         { 
-            'field': 'Address', 
+            'field': 'address', 
             'type': 'Address', 
             'has missing': True,
             'variable name': 'address' 
         },
         { 
-            'field': 'LatLng', 
+            'field': 'latlng', 
             'type': 'LatLong', 
             'has missing': True,
             'variable name': 'latlng' 
