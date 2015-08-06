@@ -256,31 +256,15 @@ clustered_dupes = linker.matchBlocks(addresses_cluster(c4), threshold = 0.5)
 
 # Write out results
 
-print 'creating entity_map database'
-cursor.execute("CREATE TABLE entity_map "
-    "(pin VARCHAR(17), canon_id INTEGER, "
-    " cluster_score FLOAT, PRIMARY KEY(pin))")
+with open('entity_map.csv', 'w') as entity_map_csv:
+    entity_map_writer = csv.writer(entity_map_csv)
 
-entity_map_csv = tempfile.NamedTemporaryFile(prefix = 'entity_map_', delete = False)
-entity_map_writer = csv.writer(entity_map_csv)
-
-for cluster, scores in clustered_dupes:
-    cluster_id = cluster[0]
-    for donor_id, score in zip(cluster, scores):
-        entity_map_writer.writerow([pin, cluster_id, score])
+    for cluster, scores in clustered_dupes:
+        cluster_id = cluster[0]
+        for donor_id, score in zip(cluster, scores):
+            entity_map_writer.writerow([pin, cluster_id, score])
 
 c4.close()
-entity_map_csv.close()
-
-f = open(entity_map_csv.name, 'r')
-cursor.copy_expert("COPY entity_map FROM STDIN CSV", f)
-f.close()
-
-os.remove(entity_map_csv.name)
-
-conn1.commit()
-
-cursor.execute("CREATE INDEX head_index ON entity_map (canon_id)")
 conn1.commit()
 
 print '# duplicate sets', len(clustered_dupes)

@@ -1,7 +1,7 @@
 include config.mk
 
 .PHONY : all
-all : link
+all : entity_map.table
 
 
 .PHONY: clean
@@ -14,10 +14,27 @@ clean : $(PGDATABASE).clean
 	rm -f FOI22606.CSV
 	rm -f *.zip
 	rm -f 97634.sql
+	rm -f *.csv
 
+# Link building footprints to Cook County address points.
+entity_map.table : entity_map.csv
+	cat $< | psql -c \
+		"CREATE TABLE entity_map \
+		(pin VARCHAR(17), \
+		 canon_id INTEGER, \
+		 cluster_score FLOAT, \
+	     PRIMARY KEY (pin));
+		COPY entity_map FROM STDIN CSV; \
+		CREATE INDEX head_index ON entity_map (canon_id)"
+	touch $@
 
-link : addresses.table buildings.table
-	source bin/activate; python link.py
+entity_map.csv : addresses.table buildings.table
+	source bin/activate; \
+		python link.py
+
+.PHONY : entity_map.clean
+entity_map.clean :	
+	psql -c "DROP TABLE entity_map"
 
 
 # ============================
