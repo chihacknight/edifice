@@ -16,6 +16,15 @@ clean : $(PGDATABASE).clean
 	rm -f 97634.sql
 	rm -f *.csv
 
+# Set up python virtualenv and install python dependencies.
+bin/activate :
+	virtualenv .
+	# install numpy first to avoid dependency errors
+	source $@; \
+		pip install numpy; \
+		pip install -r requirements.txt
+
+
 # Link building footprints to Cook County address points.
 entity_map.table : entity_map.csv
 	cat $< | psql -c \
@@ -28,8 +37,8 @@ entity_map.table : entity_map.csv
 		CREATE INDEX head_index ON entity_map (canon_id)"
 	touch $@
 
-entity_map.csv : addresses.table buildings.table
-	source bin/activate; \
+entity_map.csv : bin/activate addresses.table buildings.table
+	source $<; \
 		python link.py
 
 .PHONY : entity_map.clean
