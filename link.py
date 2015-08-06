@@ -12,7 +12,7 @@ import psycopg2
 import psycopg2.extras
 
 settings_location = 'dedupe.settings'
-training_location = 'dedupe_training.json'
+training_location = 'address_matching_training.json'
 
 conn1 = psycopg2.connect( 
     database = os.environ['PGDATABASE']
@@ -27,6 +27,13 @@ conn2 = psycopg2.connect(
     )
 
 cursor = conn1.cursor()
+
+canonical_select = "SELECT \
+    CAST (ST_X(latlng) AS double precision) AS lng, \
+    CAST (ST_Y(latlng) AS double precision) AS lat, \
+    address, \
+    pin \
+    FROM addresses"
 
 if os.path.exists(settings_location):
     with open(settings_location, 'r') as settings:
@@ -54,14 +61,31 @@ else:
     
     linker = dedupe.Gazetteer(fields, num_cores = 2)
 
-    canonical_addresses = conn1.cursor('canonical_addresses')
-    canonical_addresses.execute("SELECT address, latlng, pin FROM addresses")
+    print 'selecting canonical addresses from addresses database'
+    canonical_addresses = conn1.cursor('canonical_select')
+    canonical_addresses.execute(canonical_select)
 
-    messy_addresses = conn2.cursor('messy_addresses')
-    messy_addresses.execute("SELECT address, latlng FROM buildings")
+    print 'selecting messy addresses from buildings database'
+    messy_addresses = conn2.cursor('messy_select')
+    messy_addresses.execute("SELECT \
+        CAST (ST_X(latlng) AS double precision) AS lng, \
+        CAST (ST_Y(latlng) AS double precision) AS lat, \
+        address \
+        FROM buildings"
+    )
 
-    tmp_canonical = dict((i, row) for i, row in enumerate(canonical_addresses))
-    tmp_messy = dict((i, row) for i, row in enumerate(messy_addresses))
+    # Transform the row into the format expected by dedupe.
+    def dedupeFormat(row):
+        row['latlng'] = (row['lat'], row['lng'])
+        return row
+
+    tmp_canonical = dict(
+        (i, dedupeFormat(row)) for i, row in enumerate(canonical_addresses)
+    )
+
+    tmp_messy = dict(
+        (i, dedupeFormat(row)) for i, row in enumerate(messy_addresses)
+    )
 
     linker.sample(tmp_canonical, tmp_messy, 75000)
     del tmp_canonical, tmp_messy
@@ -109,7 +133,7 @@ for field in linker.blocker.index_fields:
 print 'writing blocking map...'
 
 c3 = conn1.cursor('address_select2')
-c3.execute(ADDRESS_SELECT)
+c3.execute(canonical_select)
 full_data = ((row['pin'], row) for row in c3)
 blocked_data = linker.blocker(full_data)
 
