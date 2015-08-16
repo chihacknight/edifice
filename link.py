@@ -14,19 +14,13 @@ import psycopg2.extras
 settings_location = 'dedupe.settings'
 training_location = 'address_matching_training.json'
 
-conn1 = psycopg2.connect( 
+conn = psycopg2.connect( 
     database = os.environ['PGDATABASE']
     , user = os.environ['PGUSER']
     , cursor_factory = psycopg2.extras.RealDictCursor 
     )
 
-conn2 = psycopg2.connect( 
-    database = os.environ['PGDATABASE']
-    , user = os.environ['PGUSER']
-    , cursor_factory = psycopg2.extras.RealDictCursor
-    )
-
-cursor = conn1.cursor()
+cursor = conn.cursor()
 
 canonical_select = "SELECT \
     CAST (ST_X(latlng) AS double precision) AS lng, \
@@ -62,11 +56,11 @@ else:
     linker = dedupe.Gazetteer(fields, num_cores = 2)
 
     print 'selecting canonical addresses from addresses database'
-    canonical_addresses = conn1.cursor('canonical_select')
+    canonical_addresses = conn.cursor('canonical_select')
     canonical_addresses.execute(canonical_select)
 
     print 'selecting messy addresses from buildings database'
-    messy_addresses = conn2.cursor('messy_select')
+    messy_addresses = conn.cursor('messy_select')
     messy_addresses.execute("SELECT \
         CAST (ST_X(latlng) AS double precision) AS lng, \
         CAST (ST_Y(latlng) AS double precision) AS lat, \
@@ -124,15 +118,15 @@ cursor.execute("CREATE TABLE blocking_map "
 print 'creating inverted index...'
 
 for field in linker.blocker.index_fields:
-    c2 = conn2.cursor('c2')
+    c2 = conn.cursor('c2')
     c2.execute("SELECT DISTINCT %s FROM addresses" % field)
-    field_data = (row for row in c2)
+    field_data = set(row[field] for row in c2)
     linker.blocker.index(field_data, field)
     c2.close()
 
 print 'writing blocking map...'
 
-c3 = conn1.cursor('address_select2')
+c3 = conn.cursor('address_select2')
 c3.execute(canonical_select)
 full_data = ((row['pin'], row) for row in c3)
 blocked_data = linker.blocker(full_data)
@@ -151,7 +145,7 @@ f.close()
 
 os.remove(blocking_map_csv.name)
 
-conn1.commit()
+conn.commit()
 
 print 'prepare blocking table. this will probably take a while...'
 logging.info('indexing block_key')
@@ -197,7 +191,7 @@ cursor.execute("CREATE TABLE covered_blocks "
 cursor.execute("CREATE UNIQUE INDEX covered_blocks_pin_idx "
     "ON covered_blocks (pin)")
 
-conn1.commit()
+conn.commit()
 
 logging.info('creating smaller coverage')
 cursor.execute("CREATE TABLE smaller_coverage "
@@ -207,7 +201,7 @@ cursor.execute("CREATE TABLE smaller_coverage "
     " FROM plural_block INNER JOIN covered_blocks "
     " USING (donor_id))")
 
-conn1.commit()
+conn.commit()
 
 
 # Clustering
@@ -244,7 +238,7 @@ def addresses_cluster(results):
     if records:
         yield records
 
-c4 = conn1.cursor('c4')
+c4 = conn.cursor('c4')
 c4.execute("SELECT pin, "
     "FROM smaller_coverage "
     "INNER JOIN buildings "
@@ -265,7 +259,7 @@ with open('entity_map.csv', 'w') as entity_map_csv:
             entity_map_writer.writerow([pin, cluster_id, score])
 
 c4.close()
-conn1.commit()
+conn.commit()
 
 print '# duplicate sets', len(clustered_dupes)
 print 'out of', len(messy_addresses)
