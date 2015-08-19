@@ -55,11 +55,11 @@ else:
     
     linker = dedupe.Gazetteer(fields, num_cores = 2)
 
-    print 'selecting canonical addresses from addresses database'
+    logging.info('selecting canonical addresses from addresses database')
     canonical_addresses = conn.cursor('canonical_select')
     canonical_addresses.execute(canonical_select)
 
-    print 'selecting messy addresses from buildings database'
+    logging.info('selecting messy addresses from buildings database')
     messy_addresses = conn.cursor('messy_select')
     messy_addresses.execute("SELECT \
         CAST (ST_X(latlng) AS double precision) AS lng, \
@@ -88,11 +88,11 @@ else:
     # Use training data from previous runs of dedupe, if it exists.
     # Note: If you want to retrain from scratch, delete the training data file.
     if os.path.exists(training_location):
-        print 'reading labeled examples from...', training_location
+        logging.info('reading labeled examples from ', training_location)
         with open(training_location, 'r') as training:
             linker.readTraining(training)
 
-    print 'starting interactive labeling...'
+    logging.info('starting interactive labeling...')
     dedupe.consoleLabel(linker)
 
     linker.train(ppc = 0.001, uncovered_dupes = 5)
@@ -106,26 +106,27 @@ else:
 
     linker.cleanupTraining()
 
-print 'blocking...'
+logging.info('blocking...')
 
-print 'creating blocking map database...'
+# To run blocking on such a large set of data, we create a separate table
+# that contains blocking keys and record ids
+logging.info('creating blocking map database...')
 cursor.execute("DROP TABLE IF EXISTS blocking_map")
 cursor.execute("CREATE TABLE blocking_map "
     "(block_key VARCHAR(200), pin VARCHAR(17))")
 
 # If dedupe learned an Index Predicate, we have to take a pass through the data
 # and create indices.
-print 'creating inverted index...'
+logging.info('indexing...')
+c2 = conn.cursor('c2')
+c2.execute(canonical_select)
+field_data = (row for row in c2)
+linker.index(field_data)
+c2.close()
 
-for field in linker.blocker.index_fields:
-    c2 = conn.cursor('c2')
-    c2.execute("SELECT DISTINCT %s FROM addresses" % field)
-    field_data = set(row[field] for row in c2)
-    linker.blocker.index(field_data, field)
-    c2.close()
-
-print 'writing blocking map...'
-
+# Now we are ready to write our blocking map table by creating a
+# generator that yields unique `(block_key, pin)` tuples.
+logging.info('writing blocking map...')
 c3 = conn.cursor('address_select2')
 c3.execute(canonical_select)
 full_data = ((row['pin'], row) for row in c3)
@@ -147,7 +148,13 @@ os.remove(blocking_map_csv.name)
 
 conn.commit()
 
-print 'prepare blocking table. this will probably take a while...'
+
+# Remove blocks that contain only one record, sort by block key and
+# donor, key and index blocking map.
+#
+# These steps, particularly the sorting will let us quickly create
+# blocks of data for comparison
+logging.info('prepare blocking table. this will probably take a while...')
 logging.info('indexing block_key')
 
 cursor.execute("CREATE INDEX blocking_map_key_idx ON blocking_map (block_key)")
@@ -157,6 +164,10 @@ cursor.execute("DROP TABLE IF EXISTS plural_block")
 cursor.execute("DROP TABLE IF EXISTS covered_blocks")
 cursor.execute("DROP TABLE IF EXISTS smaller_coverage")
 
+
+# Many block_keys will only form blocks that contain a single
+# record. Since there are no comparisons possible withing such a
+# singleton block we can ignore them.
 logging.info('calculating plural key')
 cursor.execute("CREATE TABLE plural_key "
     "(block_key VARCHAR(200), "
@@ -180,7 +191,15 @@ cursor.execute("CREATE INDEX plural_block_pin_idx ON plural_block (pin)")
 cursor.execute("CREATE UNIQUE INDEX plural_block_block_id_pin_uniq "
     " ON plural_block (block_id, pin)")
 
+
+# To use Kolb, et.al's Redundant Free Comparison scheme, we need to
+# keep track of all the block_ids that are associated with a
+# particular donor records. We'll use PostgreSQL's string_agg function to
+# do this. This function will truncate very long lists of associated
+# ids, so we'll also increase the maximum string length to try to
+# avoid this.
 logging.info('creating covered_blocks')
+cursor.execute("SET group_concat_max_len = 2048")
 cursor.execute("CREATE TABLE covered_blocks "
     "AS (SELECT donor_id, "
     " string_agg(CAST(block_id AS TEXT), ',' ORDER BY block_id) "
@@ -193,6 +212,11 @@ cursor.execute("CREATE UNIQUE INDEX covered_blocks_pin_idx "
 
 conn.commit()
 
+
+# In particular, for every block of records, we need to keep
+# track of a donor records's associated block_ids that are SMALLER than
+# the current block's id. Because we ordered the ids when we did the
+# GROUP_CONCAT we can achieve this by using some string hacks.
 logging.info('creating smaller coverage')
 cursor.execute("CREATE TABLE smaller_coverage "
     "AS (SELECT pin, block_id, "
@@ -223,15 +247,15 @@ def addresses_cluster(results):
                 i += 1
 
                 if i % 10000 == 0:
-                    print i, "blocks"
-                    print time.time() - start.time, "seconds"
+                    logging.info(i, "blocks")
+                    logging.info(time.time() - start.time, "seconds")
         else:
             smaller_ids = row['smaller_ids']
 
             if smaller_ids:
                 smaller_ids = lset(smaller_ids.split(','))
             else:
-                smaler_ids = lset([])
+                smaller_ids = lset([])
 
             records.append((row['pin'], row, smaller_ids))
 
@@ -245,7 +269,7 @@ c4.execute("SELECT pin, "
     "USING (pin) "
     "ORDER BY (block_id)")
 
-print 'clustering...'
+logging.info('clustering...')
 clustered_dupes = linker.matchBlocks(addresses_cluster(c4), threshold = 0.5)
 
 # Write out results
@@ -261,8 +285,8 @@ with open('entity_map.csv', 'w') as entity_map_csv:
 c4.close()
 conn.commit()
 
-print '# duplicate sets', len(clustered_dupes)
-print 'out of', len(messy_addresses)
+logging.info('# duplicate sets', len(clustered_dupes))
+logging.info('out of', len(messy_addresses))
 
 canonical_lookup = {}
 for n_results in clustered_dupes:
