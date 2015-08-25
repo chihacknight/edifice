@@ -34,21 +34,6 @@ match_map.clean :
 	psql -c "DROP TABLE match_map"
 
 
-# ============================
-# Cook County Property Parcels
-# ============================
-parcels.table : ccgisdata-Parcel_2013.shp $(PGDATABASE).db
-	shp2pgsql -I -s 4326 -d $< $(basename $@) | psql
-	touch $@
-
-ccgisdata-Parcel_2013.shp : parcels.zip
-	unzip -j $<
-	touch $@
-
-parcels.zip :
-	wget --no-use-server-timestamps -O $@ "https://datacatalog.cookcountyil.gov/api/geospatial/5i2c-y2u6?method=export&format=Original"
-
-
 # =================================================================
 # Cook County Tax Assessor's Data (obtained via FOIA request 22606)
 # =================================================================
@@ -120,9 +105,28 @@ foia-22606-2013-10-16.zip :
 # ===================================
 # City of Chicago Building Footprints
 # ===================================
-buildings.table : buildings.shp buildings.sql 97634.insert $(PGDATABASE).db
+buildings.table : buildings.shp 97634.insert $(PGDATABASE).db
 	shp2pgsql -I -D -W "LATIN1" -s 97634 -d $< $(basename $@) | psql 
-	psql -f $(word 2, $^)
+
+	# Synthesize address field out of components
+	psql -c "ALTER TABLE buildings ADD COLUMN address varchar(60); \
+		 UPDATE buildings SET address = concat_ws(' ', \
+			label_hous, \
+			unit_name, \
+			pre_dir1, \
+			st_name1, \
+			suf_dir1, \
+			st_type1, \
+			'CHICAGO IL' \
+		 )"
+	
+	# Create a `latlng` geometry column.
+	psql -c "SELECT AddGeometryColumn('buildings', 'stateplane', 97634, 'POINT', 2); \
+		UPDATE buildings SET stateplane = \
+			ST_SetSRID(ST_MakePoint(x_coord, y_coord), 97634); \
+		SELECT AddGeometryColumn('buildings', 'latlng', 4326, 'POINT', 2); \
+		UPDATE buildings SET latlng = ST_Transform(stateplane, 4326)"
+
 	touch $@
 
 buildings.shp : buildings.zip
@@ -136,10 +140,32 @@ buildings.zip :
 # ================================================
 # Cook County Address Points (canonical addresses)
 # ================================================
-addresses.table : addressPointChi.shp addresses.sql $(PGDATABASE).db
+addresses.table : addressPointChi.shp $(PGDATABASE).db
 	# Synthesize address field out of components.
 	shp2pgsql -I -s 4326 -d $< $(basename $@) | psql
-	psql -f $(word 2, $^)
+
+	# Synthesize address field out of components.
+	psql -c "ALTER TABLE addresses ADD COLUMN address varchar(171); \
+		UPDATE addresses SET address = concat_ws(' ', \
+			addrnocom, \
+			stnamecom, \
+			uspspn, \
+			uspsst, \
+			zip5 \
+		)"
+
+	# Create a `latlng` geometry column.
+	psql -c \
+	       "SELECT AddGeometryColumn('addresses', 'latlng', 4326, 'POINT', 2); \
+		UPDATE addresses SET latlng = CASE \
+			WHEN longitude IS NULL OR latitude IS NULL \
+			THEN ST_SetSRID(ST_MakePoint(0.0, 0.0), 4326) \
+			ELSE ST_GeomFromText( \
+				'POINT(' || \
+					concat_ws(' ', longitude, latitude) || \
+				')', 4326 \
+			) END"
+
 	touch $@
 
 addressPointChi.shp : addresses.zip
