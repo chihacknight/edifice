@@ -146,7 +146,7 @@ buildings.shp : buildings.zip
 	touch $@
 
 buildings.zip : 
-	wget --no-use-server-timestamps -O $@ "https://data.cityofchicago.org/api/geospatial/qv97-3bvb?method=export&format=Shapefile"
+	wget --no-use-server-timestamps -O $@ "https://data.cityofchicago.org/api/geospatial/hz9b-7nh8?method=export&format=Shapefile"
 
 
 # ================================================
