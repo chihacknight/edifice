@@ -1,41 +1,46 @@
 include config.mk
 
 .PHONY : all
-all : match_map.csv
+all : edifice.table
 
 
 .PHONY: clean
 clean : $(PGDATABASE).clean
 	# Clean up downloaded files
 	# Use `rm -f` so that no errors are thrown if the files don't exist.
-	rm -f buildings.{dbf,prj,sbn,sbx,shp,shx} # avoid deleting buildings.sql
-	rm -f addressPointChi.*
-	rm -f ccgisdata-Parcel_2013.*
-	rm -f FOI22606.CSV
+	rm -f *.{dbf,prj,sbn,sbx,shp,shx} # shapefiles
 	rm -f *.zip
-	rm -f 97634.sql
-	rm -f *.csv
+	rm -f *.sql
+	rm -f *.CSV *.csv
+
+
+.PHONY : download
+download : buildings.zip addresses.zip 97634.sql foia-22606-2013-10-16.zip
+
 
 # Set up python virtualenv and install python dependencies.
 bin/activate : requirements.txt
 	virtualenv .
+
 	# install numpy first to avoid dependency errors
 	source $@; \
 		pip install "numpy>=1.9"; \
 		pip install -r $<
 
 
-match_map.csv : bin/activate link.py addresses.table buildings.table
-	source $<; \
-		python $(word 2, $^)
-
-.PHONY : match_map.clean
-match_map.clean :	
-	psql -c "DROP TABLE match_map"
-
-
 # Set target-specific TABLE variable for each target which modifies a db table.
 %.table : TABLE = $(basename $@)
+
+
+# =================
+# Combined datasets
+# =================
+
+# Match addresses and buildings using dedupe.
+edifice.table : link.py bin/activate addresses.table buildings.table
+	source bin/activate; python $<
+	touch $@
+
 
 # =================================================================
 # Cook County Tax Assessor's Data (obtained via FOIA request 22606)
