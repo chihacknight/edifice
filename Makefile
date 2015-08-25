@@ -34,12 +34,15 @@ match_map.clean :
 	psql -c "DROP TABLE match_map"
 
 
+# Set target-specific TABLE variable for each target which modifies a db table.
+%.table : TABLE = $(basename $@)
+
 # =================================================================
 # Cook County Tax Assessor's Data (obtained via FOIA request 22606)
 # =================================================================
 taxes.table : FOI22606.CSV $(PGDATABASE).db
 	psql -c \
-		"CREATE TABLE $(basename $@) \
+		"CREATE TABLE $(TABLE) \
 		 (pin CHAR(14), \
 		  mailing_address VARCHAR(50), \
 		  property_location VARCHAR(50), \
@@ -73,8 +76,8 @@ taxes.table : FOI22606.CSV $(PGDATABASE).db
 		  pass INTEGER, \
 		  assessment_year INTEGER)"
 	iconv -f latin1 -t utf-8 $< | \
-	psql -c \
-		"COPY $(basename $@) FROM STDIN WITH CSV QUOTE AS '\"' DELIMITER AS ','"
+	psql -c "COPY $(TABLE) FROM STDIN \
+		 WITH CSV QUOTE AS '\"' DELIMITER AS ','"
 	touch $@
 
 FOI22606.CSV : foia-22606-2013-10-16.zip
@@ -106,11 +109,11 @@ foia-22606-2013-10-16.zip :
 # City of Chicago Building Footprints
 # ===================================
 buildings.table : buildings.shp 97634.insert $(PGDATABASE).db
-	shp2pgsql -I -D -W "LATIN1" -s 97634 -d $< $(basename $@) | psql 
+	shp2pgsql -I -D -W "LATIN1" -s 97634 -d $< $(TABLE) | psql 
 
 	# Synthesize address field out of components
-	psql -c "ALTER TABLE buildings ADD COLUMN address varchar(60); \
-		 UPDATE buildings SET address = concat_ws(' ', \
+	psql -c "ALTER TABLE $(TABLE) ADD COLUMN address varchar(60); \
+		 UPDATE $(TABLE) SET address = concat_ws(' ', \
 			label_hous, \
 			unit_name, \
 			pre_dir1, \
@@ -121,11 +124,11 @@ buildings.table : buildings.shp 97634.insert $(PGDATABASE).db
 		 )"
 	
 	# Create a `latlng` geometry column.
-	psql -c "SELECT AddGeometryColumn('buildings', 'stateplane', 97634, 'POINT', 2); \
-		UPDATE buildings SET stateplane = \
+	psql -c "SELECT AddGeometryColumn('$(TABLE)', 'stateplane', 97634, 'POINT', 2); \
+		UPDATE $(TABLE) SET stateplane = \
 			ST_SetSRID(ST_MakePoint(x_coord, y_coord), 97634); \
-		SELECT AddGeometryColumn('buildings', 'latlng', 4326, 'POINT', 2); \
-		UPDATE buildings SET latlng = ST_Transform(stateplane, 4326)"
+		SELECT AddGeometryColumn('$(TABLE)', 'latlng', 4326, 'POINT', 2); \
+		UPDATE $(TABLE) SET latlng = ST_Transform(stateplane, 4326)"
 
 	touch $@
 
@@ -142,11 +145,11 @@ buildings.zip :
 # ================================================
 addresses.table : addressPointChi.shp $(PGDATABASE).db
 	# Synthesize address field out of components.
-	shp2pgsql -I -s 4326 -d $< $(basename $@) | psql
+	shp2pgsql -I -s 4326 -d $< $(TABLE) | psql
 
 	# Synthesize address field out of components.
-	psql -c "ALTER TABLE addresses ADD COLUMN address varchar(171); \
-		UPDATE addresses SET address = concat_ws(' ', \
+	psql -c "ALTER TABLE $(TABLE) ADD COLUMN address varchar(171); \
+		UPDATE $(TABLE) SET address = concat_ws(' ', \
 			addrnocom, \
 			stnamecom, \
 			uspspn, \
@@ -156,8 +159,8 @@ addresses.table : addressPointChi.shp $(PGDATABASE).db
 
 	# Create a `latlng` geometry column.
 	psql -c \
-	       "SELECT AddGeometryColumn('addresses', 'latlng', 4326, 'POINT', 2); \
-		UPDATE addresses SET latlng = CASE \
+	       "SELECT AddGeometryColumn('$(TABLE)', 'latlng', 4326, 'POINT', 2); \
+		UPDATE $(TABLE) SET latlng = CASE \
 			WHEN longitude IS NULL OR latitude IS NULL \
 			THEN ST_SetSRID(ST_MakePoint(0.0, 0.0), 4326) \
 			ELSE ST_GeomFromText( \
