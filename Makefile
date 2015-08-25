@@ -48,7 +48,7 @@ taxes.table : FOI22606.CSV $(PGDATABASE).db
 		  property_location VARCHAR(50), \
 		  township VARCHAR(13), \
 		  property_class INTEGER, \
-		  property_classification VARCHAR(150), \
+		  property_class_description VARCHAR(150), \
 		  triennial VARCHAR(4), \
 		  land_square_footage INTEGER, \
 		  building_square_footage INTEGER, \
@@ -78,6 +78,10 @@ taxes.table : FOI22606.CSV $(PGDATABASE).db
 	iconv -f latin1 -t utf-8 $< | \
 	psql -c "COPY $(TABLE) FROM STDIN \
 		 WITH CSV QUOTE AS '\"' DELIMITER AS ','"
+	
+	# Index 'pin' to improve performance of join.
+	psql -c "CREATE INDEX $(TABLE)_pin_idx ON $(TABLE) (pin)"
+
 	touch $@
 
 FOI22606.CSV : foia-22606-2013-10-16.zip
@@ -168,6 +172,9 @@ addresses.table : addressPointChi.shp $(PGDATABASE).db
 					concat_ws(' ', longitude, latitude) || \
 				')', 4326 \
 			) END"
+
+	# Index 'pin' to improve performance of join.
+	psql -c "CREATE INDEX $(TABLE)_pin_idx ON $(TABLE) (pin)"
 
 	touch $@
 
