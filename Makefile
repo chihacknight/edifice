@@ -1,7 +1,7 @@
 include config.mk
 
 .PHONY : all
-all : entity_map.table
+all : match_map.csv
 
 
 .PHONY: clean
@@ -25,25 +25,13 @@ bin/activate : requirements.txt
 		pip install -r $<
 
 
-# Link building footprints to Cook County address points.
-entity_map.table : entity_map.csv
-	cat $< | psql -c \
-		"CREATE TABLE entity_map \
-		(pin VARCHAR(17), \
-		 canon_id INTEGER, \
-		 cluster_score FLOAT, \
-	     PRIMARY KEY (pin));
-		COPY entity_map FROM STDIN CSV; \
-		CREATE INDEX head_index ON entity_map (canon_id)"
-	touch $@
-
-entity_map.csv : bin/activate link.py addresses.table buildings.table
+match_map.csv : bin/activate link.py addresses.table buildings.table
 	source $<; \
 		python $(word 2, $^)
 
-.PHONY : entity_map.clean
-entity_map.clean :	
-	psql -c "DROP TABLE entity_map"
+.PHONY : match_map.clean
+match_map.clean :	
+	psql -c "DROP TABLE match_map"
 
 
 # ============================
