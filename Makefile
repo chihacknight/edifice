@@ -37,8 +37,34 @@ bin/activate : requirements.txt
 # =================
 
 # Match addresses and buildings using dedupe.
-edifice.table : link.py bin/activate addresses.table buildings.table
+edifice.table : link.py bin/activate addresses.table buildings.table taxes.table
 	source bin/activate; python $<
+	
+	psql -c "CREATE TABLE $(TABLE) AS \
+		 SELECT \
+			a.address, \
+			a.latlng, \
+			b.geom AS footprint, \
+			b.year_built, \
+			b.stories, \
+			b.bldg_condi AS building_condition, \
+			t.pin, \
+			t.property_class, \
+			t.tax_code, \
+			t.property_class_description, \
+			t.current_land AS current_land_value, \
+			t.current_building AS current_building_value, \
+			t.current_total AS current_total_value, \
+			t.current_market_value, \
+			t.building_age, \
+			t.assessment_year, \
+			t.building_use, \
+			t.neighborhood, \
+			t.exterior_construction	\
+		 FROM addresses a \
+			INNER JOIN buildings b ON (a.gid = b.address_gid) \
+			INNER JOIN taxes t USING (pin)"
+		 
 	touch $@
 
 
