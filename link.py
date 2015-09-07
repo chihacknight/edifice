@@ -111,22 +111,6 @@ else:
 
     linker.cleanupTraining()
 
-#logging.info('indexing')
-# If dedupe learned a predicate which requires indexing the data, we must
-# take a pass through the data and create indices.
-# dedupe allows index predicates by default during sampling and training.
-#for field in deduper.blocker.index_fields:
-#    for role, table_name in datasets.iteritems():
-#        indexing_cursor = conn.cursor('indexing_cursor')
-#        indexing_cursor.execute(
-#            """
-#            SELECT DISTINCT {field} FROM {table} 
-#            """
-#        ).format(field = field, table = table_name)
-#        field_data = (row[field] for dedupe_format(row) in indexing_cursor)
-#        deduper.blocker.index(field_data, field)
-#        indexing_cursor.close()
-
 logging.info('blocking')
 
 # To run blocking on such a large set of data, we create a separate table
